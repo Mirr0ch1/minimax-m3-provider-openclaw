@@ -1,6 +1,6 @@
 {
   "name": "openclaw-minimax-m3",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "main": "index.js",
   "description": "Unified MiniMax M3 provider via OpenAI Responses API: chat/text + image + video understanding",

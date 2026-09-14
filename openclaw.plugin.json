@@ -2,7 +2,7 @@
   "id": "minimax-m3",
   "name": "MiniMax M3 (Responses)",
   "description": "Unified MiniMax M3 provider via OpenAI Responses API. Chat/text with reasoning-preserving replay; image and video understanding via Responses API input_image / input_video content parts.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "providers": [
     "minimax-tp"
   ],

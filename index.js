@@ -18,7 +18,7 @@ import {
  *     calling POST {baseUrl}/responses with input_image / input_video parts.
  *
  * MiniMax Responses API reference (smoke-tested 2026-08-19):
- *   - endpoint:  POST https://api.minimaxi.com/v1/responses
+ *   - endpoint:  POST https://api.minimax.cn/v1/responses
  *   - auth:      Authorization: Bearer <token>
  *   - input_image:  image_url data URL, formats JPEG/PNG/GIF/WEBP, detail low/default/high
  *   - input_video:  video_url data URL, formats MP4/AVI/MOV/MKV, fps 0.2-5, detail, max_long_side_pixel
@@ -28,7 +28,7 @@ import {
 
 const PROVIDER_ID = "minimax-tp";
 const DEFAULT_MODEL = "MiniMax-M3";
-const DEFAULT_BASE_URL = "https://api.minimaxi.com/v1";
+const DEFAULT_BASE_URL = "https://api.minimax.cn/v1";
 const DEFAULT_PROMPT =
   "请详细描述这个多媒体内容，包括所有可见信息（画面、动作、文字、场景等）。";
 const MAX_OUTPUT_TOKENS = 2000;
