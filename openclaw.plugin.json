@@ -1,0 +1,48 @@
+{
+  "id": "minimax-m3",
+  "name": "MiniMax M3 (Responses)",
+  "description": "Unified MiniMax M3 provider via OpenAI Responses API. Chat/text with reasoning-preserving replay; image and video understanding via Responses API input_image / input_video content parts.",
+  "version": "1.0.0",
+  "providers": [
+    "minimax-tp"
+  ],
+  "contracts": {
+    "mediaUnderstandingProviders": [
+      "minimax-tp"
+    ]
+  },
+  "mediaUnderstandingProviderMetadata": {
+    "minimax-tp": {
+      "capabilities": [
+        "image",
+        "video"
+      ],
+      "defaultModels": {
+        "image": "MiniMax-M3",
+        "video": "MiniMax-M3"
+      },
+      "autoPriority": {
+        "image": 10,
+        "video": 10
+      }
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "serviceTier": {
+        "type": "string",
+        "enum": [
+          "standard",
+          "priority"
+        ],
+        "description": "MiniMax service_tier. priority = 1.5x price, priority queue admission (fewer failures, lower latency)."
+      },
+      "promptCacheKey": {
+        "type": "string",
+        "description": "MiniMax prompt_cache_key for prompt caching."
+      }
+    }
+  }
+}
