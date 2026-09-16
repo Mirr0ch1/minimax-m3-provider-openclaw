@@ -1,12 +1,28 @@
 {
-  "name": "openclaw-minimax-m3",
-  "version": "1.0.1",
+  "name": "@mirr0ch1/minimax-m3-provider",
+  "version": "1.0.0",
   "type": "module",
   "main": "index.js",
-  "description": "Unified MiniMax M3 provider via OpenAI Responses API: chat/text + image + video understanding",
+  "description": "OpenClaw provider plugin for MiniMax M3 over the OpenAI Responses API: chat/text with reasoning-preserving replay, plus image and video understanding.",
+  "license": "MIT",
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "minimax",
+    "minimax-m3",
+    "MiniMax-M3",
+    "openai-responses",
+    "video-understanding"
+  ],
   "openclaw": {
     "extensions": [
       "./index.js"
-    ]
+    ],
+    "compat": {
+      "pluginApi": ">=2026.4.2"
+    },
+    "build": {
+      "openclawVersion": "2026.9.3"
+    }
   }
 }

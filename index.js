@@ -26,6 +26,7 @@ import {
  *   - reasoning: { effort: none|minimal|low|medium|high } (M3: non-none just enables thinking)
  */
 
+const PLUGIN_ID = "minimax-m3-provider";
 const PROVIDER_ID = "minimax-tp";
 const DEFAULT_MODEL = "MiniMax-M3";
 const DEFAULT_BASE_URL = "https://api.minimax.cn/v1";
@@ -166,8 +167,8 @@ function toDataUrl(req, kind) {
 // ── 插件入口 ─────────────────────────────────────────────────────────
 
 export default definePluginEntry({
-  id: "minimax-m3",
-  name: "MiniMax M3 (Responses)",
+  id: PLUGIN_ID,
+  name: "MiniMax M3 Provider",
   description:
     "Unified MiniMax M3 provider via OpenAI Responses API: chat/text " +
     "(reasoning-preserving replay) + image/video understanding.",
@@ -202,7 +203,7 @@ export default definePluginEntry({
             return baseStreamFn(model, context, options);
           }
           const cfg =
-            ctx.config?.plugins?.entries?.["minimax-m3"]?.config ?? {};
+            ctx.config?.plugins?.entries?.[PLUGIN_ID]?.config ?? {};
           if (!cfg.serviceTier && !cfg.promptCacheKey) {
             return baseStreamFn(model, context, options);
           }
