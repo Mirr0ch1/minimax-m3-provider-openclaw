@@ -2,9 +2,9 @@
 
 # minimax-m3-provider
 
-**OpenClaw 插件:以 OpenAI Responses 协议接入 MiniMax M3 —— 聊天/文本 + 图片理解 + 视频理解**
+**OpenClaw 插件:以 OpenAI Responses 协议接入 MiniMax M3 / M3.1 Flash Preview —— 聊天/文本 + 图片理解 + 视频理解**
 
-*OpenClaw plugin: MiniMax M3 over the OpenAI Responses API — chat/text with reasoning-preserving replay, plus image and video understanding*
+*OpenClaw plugin: MiniMax M3 & M3.1 Flash Preview over the OpenAI Responses API — chat/text with reasoning-preserving replay, plus image and video understanding*
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-2026.9.3-blue.svg)](https://github.com/openclaw/openclaw)
@@ -116,13 +116,24 @@ echo 'MINIMAX_TOKEN_PLAN_API_KEY=your-key-here' >> ~/.openclaw/.env
             contextWindow: 1000000,
             maxTokens: 131072,
           },
+          {
+            id: "MiniMax-M3.1-Flash-Preview",
+            name: "MiniMax-M3.1-Flash-Preview",
+            api: "openai-responses",
+            reasoning: true,
+            input: ["text"],
+            contextWindow: 1000000,
+            maxTokens: 131072,
+            compat: { supportedReasoningEfforts: ["low", "medium", "high", "xhigh", "max"] },
+          },
         ],
       },
     },
   },
   agents: {
     defaults: {
-      modelPolicy: { allow: ["minimax-tp/MiniMax-M3"] },  // 否则 agent 用不了
+      // 否则 agent 用不了(把要用到的模型都列上)
+      modelPolicy: { allow: ["minimax-tp/MiniMax-M3", "minimax-tp/MiniMax-M3.1-Flash-Preview"] },
     },
   },
 }
@@ -180,16 +191,44 @@ openclaw models list  | grep -i minimax
 
 | 模型 / Model | 输入 | 上下文 | 最大输出 | 推理 |
 |---|---|---|---|---|
-| `MiniMax-M3` | text + image + video | 1,000,000 | 131,072 | ✅ |
+| `MiniMax-M3` | text + image + video | 1,000,000 | 131,072 | ✅ 开关式 |
+| `MiniMax-M3.1-Flash-Preview` | text | 1,000,000 | 131,072 | ✅ 强度可调(low→max) |
 
 > 输出的上游硬上限是 524,288,这里取官方推荐值 131,072。视频/图片理解链路的
 > `max_output_tokens` 固定为 2000(描述类任务足够,且避免思考把预算吃光)。
+>
+> `MiniMax-M3.1-Flash-Preview` 目前**仅通过 Token Plan / MiniMax Code 提供**(和本插件
+> 默认使用的 `MINIMAX_TOKEN_PLAN_API_KEY` 一致),官方定位为文本模型,因此输入只声明
+> `text`。上下文/输出上限沿用 M3 的同族取值,如官方后续公布不同数字请按需调整。
 
 ---
 
 ## 思考等级 / Thinking Levels
 
-`/think` 接受 `off` / `low` / `medium` / `high`,默认 `high`,映射为 `reasoning.effort`:
+### M3.1 Flash Preview:真实档位,`high` → `max`
+
+M3.1 的 `reasoning` **始终开启**,`effort` 是真实强度旋钮
+(`low` / `medium` / `high` / `xhigh` / `max`,省略时服务端默认 `max`),
+且 `effort: "none"` 会直接返回 **HTTP 400**。因此该模型**不提供 `off` 档**。
+
+`/think` 接受 `low` / `medium` / `high`,默认 `high`,由插件在 `wrapStreamFn`
+里把档位钉成 MiniMax 的 `reasoning.effort`:
+
+| 等级 / Level | `reasoning.effort` | 说明 |
+|---|---|---|
+| `high` | `max` | **OpenClaw 的最高档映射到模型最高档** |
+| `medium` | `medium` | 直通 |
+| `low` | `low` | 直通 |
+| `off`(仅遗留会话状态) | `low` | 模型无法真正关闭思考,退化到最省档;不下发 `none` |
+| `xhigh` / `max` / `ultra` | `max` | 兼容其它 Provider 切换过来的档位 |
+
+> 为什么必须在插件里钉?OpenClaw 核心默认把 `high` 原样写成 `"high"`(对 M3.1 只是中等),
+> 而 `off` 时干脆**不写 `reasoning` 字段** —— 那会被 M3.1 当成默认的 `max`。两头都错,
+> 所以插件在请求体上做显式映射。
+
+### M3:开关式
+
+`/think` 接受 `off` / `low` / `medium` / `high`,默认 `high`:
 
 | 等级 / Level | `reasoning.effort` | 效果 |
 |---|---|---|
@@ -235,7 +274,8 @@ stepfun / minimax 兜底档),默认模型都是 `MiniMax-M3`。
 2. **图片输入**用 data URL(`data:image/png;base64,...`),`detail` 三档均可。
 3. **视频输入**用 data URL(`data:video/mp4;base64,...`),`fps` 实测 2 稳定。
 4. **历史可携带 `reasoning` item**,多轮思考链连续;这是本插件选 Responses 的核心理由。
-5. **`reasoning.effort` 语义**:`none` 关闭思考,其余值只表示"开启"。
+5. **`reasoning.effort` 语义按模型不同**:M3 是开关(`none` 关闭,其余值只是"开启");
+   M3.1 Flash Preview 是强度旋钮(`low`→`max`,始终开启,`none` 报 400)。
 6. **`service_tier: "priority"`** 被网关接受,走优先队列(计费 1.5 倍)。
 
 ---
@@ -244,8 +284,10 @@ stepfun / minimax 兜底档),默认模型都是 `MiniMax-M3`。
 
 | 现象 / Symptom | 原因与处理 / Cause & Fix |
 |---|---|
-| 模型列表里没有 `MiniMax-M3` | 没解析到密钥,或没写 `models.providers.minimax-tp`。插件目录只负责动态发现,选择器读配置。 |
-| `not allowed for agent ... by agents.defaults.modelPolicy.allow` | 把 `minimax-tp/MiniMax-M3` 加进 `modelPolicy.allow`。 |
+| 模型列表里没有 `MiniMax-M3` / `MiniMax-M3.1-Flash-Preview` | 没解析到密钥,或没写 `models.providers.minimax-tp`。插件目录只负责动态发现,选择器读配置。 |
+| `not allowed for agent ... by agents.defaults.modelPolicy.allow` | 把对应模型(`minimax-tp/...`)加进 `modelPolicy.allow`。 |
+| `/think high` 时 M3.1 没有真的用 `max` | 检查模型 id 是否命中 `MiniMax-M3.1-*`(插件靠它判断是否钉 effort);providers 里 `api` 必须仍是 `openai-responses`。 |
+| `/think off` 在 M3.1 上仍会思考 | 预期行为:M3.1 无法关闭思考,插件把它退化为 `effort: "low"`(最省),而不是下发会被 400 拒绝的 `none`。 |
 | 改了 `baseUrl` 不生效 | `models.providers["minimax-tp"].baseUrl` 与插件默认值(写死在 `index.js`)是两处。 |
 | 插件启用了但模型没出现 | 检查 `plugins.allow` 里是否有 `minimax-m3-provider`(是**插件 id**,不是 `minimax-tp`)。 |
 | 媒体理解不走 M3 | 检查是否有更高 `autoPriority` 的视觉 Provider 抢占;M3 的优先级是 10。 |
@@ -278,6 +320,13 @@ stepfun / minimax 兜底档),默认模型都是 `MiniMax-M3`。
 ---
 
 ## 更新日志 / Changelog
+
+**v1.1.0**(2026-09-28)
+- 新增 `MiniMax-M3.1-Flash-Preview` 模型接入(文本输入,Responses API,Token Plan)
+- 思考档位映射:该模型下 OpenClaw `high` → MiniMax `max`,由插件在 `wrapStreamFn` 钉入
+- 思考档位按模型区分:M3.1 不提供 `off`(模型无法关闭思考,`effort:"none"` 会 400),
+  `off` 退化到 `low`
+- 该模型的 `max_output_tokens`/`contextWindow` 沿用 M3 同族取值
 
 **v1.0.0**(2026-09-17)
 - 项目规范化改名为 `minimax-m3-provider-openclaw`,插件 id 从 `minimax-m3` 改为 `minimax-m3-provider`

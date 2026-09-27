@@ -17,13 +17,13 @@ import {
  *  2. Image / video understanding -> api.registerMediaUnderstandingProvider,
  *     calling POST {baseUrl}/responses with input_image / input_video parts.
  *
- * MiniMax Responses API reference (smoke-tested 2026-08-19):
+ * MiniMax Responses API reference (smoke-tested 2026-08-19, M3.1 2026-09-28):
  *   - endpoint:  POST https://api.minimax.cn/v1/responses
  *   - auth:      Authorization: Bearer <token>
  *   - input_image:  image_url data URL, formats JPEG/PNG/GIF/WEBP, detail low/default/high
  *   - input_video:  video_url data URL, formats MP4/AVI/MOV/MKV, fps 0.2-5, detail, max_long_side_pixel
  *   - history items can include `reasoning` (thinking continuity across turns)
- *   - reasoning: { effort: none|minimal|low|medium|high } (M3: non-none just enables thinking)
+ *   - reasoning.effort contract differs per model (see below).
  */
 
 const PLUGIN_ID = "minimax-m3-provider";
@@ -33,6 +33,59 @@ const DEFAULT_BASE_URL = "https://api.minimax.cn/v1";
 const DEFAULT_PROMPT =
   "请详细描述这个多媒体内容，包括所有可见信息（画面、动作、文字、场景等）。";
 const MAX_OUTPUT_TOKENS = 2000;
+
+// ── 模型与思考档位 ───────────────────────────────────────────────────
+
+/**
+ * Model-aware thinking policy.
+ *
+ * `MiniMax-M3` — `reasoning.effort` is an on/off switch: `none` disables
+ * thinking, every other value just turns it on with identical depth. An `off`
+ * level is therefore meaningful and is offered.
+ *
+ * `MiniMax-M3.1-Flash-Preview` — reasoning is always on and `effort` is a real
+ * depth knob (`low`/`medium`/`high`/`xhigh`/`max`, default `max` when omitted).
+ * It answers `effort: "none"` with HTTP 400, so `off` must NOT be offered and
+ * must never reach the wire.
+ */
+const M3_THINKING_LEVELS = ["off", "low", "medium", "high"];
+const M31_THINKING_LEVELS = ["low", "medium", "high"];
+
+/** Matches `MiniMax-M3.1-*` ids, tolerating a `provider/model` reference. */
+const M31_MODEL_RE = /^minimax-m3\.1(?:$|[-.\s])/i;
+
+function isM31Model(modelId) {
+  if (typeof modelId !== "string") return false;
+  const id = modelId.trim().split("/").pop();
+  return M31_MODEL_RE.test(id);
+}
+
+/**
+ * OpenClaw thinking level -> MiniMax-M3.1 `reasoning.effort`.
+ *
+ * OpenClaw's `high` is the top tier a user picks, so it maps onto the model's
+ * own `max`. `off` cannot be honoured (the endpoint rejects `none`), so it
+ * degrades to the cheapest enabled effort rather than being dropped — omitting
+ * the field is not neutral either, because M3.1 then defaults to `max`
+ * internally. `xhigh`/`max`/`ultra` also land on `max`.
+ */
+const M31_EFFORT_BY_LEVEL = {
+  off: "low",
+  minimal: "low",
+  low: "low",
+  medium: "medium",
+  adaptive: "medium",
+  high: "max",
+  xhigh: "max",
+  max: "max",
+  ultra: "max",
+};
+
+function resolveM31Effort(thinkingLevel) {
+  const level =
+    typeof thinkingLevel === "string" ? thinkingLevel.trim().toLowerCase() : "";
+  return M31_EFFORT_BY_LEVEL[level] ?? "max";
+}
 
 // ── 参数工具 ─────────────────────────────────────────────────────────
 
@@ -183,28 +236,44 @@ export default definePluginEntry({
       // NOT dropped from history -> interleaved thinking stays continuous.
       ...buildProviderReplayFamilyHooks({ family: "openai-compatible" }),
 
-      // M3 thinking is on/off (effort does not tune depth on M3).
-      resolveThinkingProfile: () => ({
-        levels: ["off", "low", "medium", "high"].map((id) => ({ id })),
-        defaultLevel: "high",
-      }),
+      // Thinking policy is per-model: M3 is an on/off thinker; M3.1 Flash
+      // Preview always reasons and must not be offered `off`.
+      resolveThinkingProfile: ({ modelId }) =>
+        isM31Model(modelId)
+          ? {
+              levels: M31_THINKING_LEVELS.map((id) => ({ id })),
+              defaultLevel: "high",
+            }
+          : {
+              levels: M3_THINKING_LEVELS.map((id) => ({ id })),
+              defaultLevel: "high",
+            },
 
-      // Inject MiniMax-specific body fields (optional, off by default):
+      // Inject MiniMax-specific body fields:
+      //   reasoning.effort          -> M3.1 only; maps OpenClaw `high` -> `max`
       //   service_tier: "priority"  -> 1.5x price, priority queue admission
       //   prompt_cache_key          -> prompt caching
+      //
+      // The service_tier / prompt_cache_key injections stay optional (only
+      // filled when absent). The M3.1 effort pin is not optional: core's own
+      // resolver maps `high` to `"high"`, which M3.1 treats as a *mid* level,
+      // and core drops the field entirely for `off` — which M3.1 silently
+      // reads as its `max` default.
       wrapStreamFn: (ctx) => {
         const baseStreamFn = ctx.streamFn;
         if (!baseStreamFn) return undefined;
+        const cfg = ctx.config?.plugins?.entries?.[PLUGIN_ID]?.config ?? {};
+        const m31Effort = isM31Model(ctx.modelId)
+          ? resolveM31Effort(ctx.thinkingLevel)
+          : undefined;
+        if (!m31Effort && !cfg.serviceTier && !cfg.promptCacheKey) {
+          return undefined;
+        }
         return (model, context, options) => {
           if (
             model.provider !== PROVIDER_ID ||
             model.api !== "openai-responses"
           ) {
-            return baseStreamFn(model, context, options);
-          }
-          const cfg =
-            ctx.config?.plugins?.entries?.[PLUGIN_ID]?.config ?? {};
-          if (!cfg.serviceTier && !cfg.promptCacheKey) {
             return baseStreamFn(model, context, options);
           }
           return streamWithPayloadPatch(
@@ -213,6 +282,16 @@ export default definePluginEntry({
             context,
             options,
             (payloadObj) => {
+              if (m31Effort) {
+                const reasoning =
+                  payloadObj.reasoning &&
+                  typeof payloadObj.reasoning === "object" &&
+                  !Array.isArray(payloadObj.reasoning)
+                    ? { ...payloadObj.reasoning }
+                    : {};
+                reasoning.effort = m31Effort;
+                payloadObj.reasoning = reasoning;
+              }
               if (cfg.serviceTier && payloadObj.service_tier === undefined) {
                 payloadObj.service_tier = cfg.serviceTier;
               }
