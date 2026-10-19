@@ -17,7 +17,7 @@ import {
  *  2. Image / video understanding -> api.registerMediaUnderstandingProvider,
  *     calling POST {baseUrl}/responses with input_image / input_video parts.
  *
- * MiniMax Responses API reference (smoke-tested 2026-08-19, M3.1 2026-09-28):
+ * MiniMax Responses API reference (smoke-tested 2026-08-19; M3.1 official 2026-10-19):
  *   - endpoint:  POST https://api.minimax.cn/v1/responses
  *   - auth:      Authorization: Bearer <token>
  *   - input_image:  image_url data URL, formats JPEG/PNG/GIF/WEBP, detail low/default/high
@@ -43,7 +43,8 @@ const MAX_OUTPUT_TOKENS = 2000;
  * thinking, every other value just turns it on with identical depth. An `off`
  * level is therefore meaningful and is offered.
  *
- * `MiniMax-M3.1-Flash-Preview` — reasoning is always on and `effort` is a real
+ * `MiniMax-M3.1-Flash` (id `MiniMax-M3.1-Flash-Preview` still resolves) —
+ * reasoning is always on and `effort` is a real
  * depth knob (`low`/`medium`/`high`/`xhigh`/`max`, default `max` when omitted).
  * It answers `effort: "none"` with HTTP 400, so `off` must NOT be offered and
  * must never reach the wire.
@@ -157,11 +158,75 @@ function extractResponsesText(data) {
   return parts.join("\n").trim();
 }
 
+/**
+ * Environment variables consulted when the host hands us no resolved secret.
+ * Order matters: the Token Plan key is the one this plugin is built around.
+ */
+const MEDIA_ENV_API_KEYS = ["MINIMAX_TOKEN_PLAN_API_KEY", "MINIMAX_API_KEY"];
+
+/** Marker OpenClaw sets on `apiKey` when auth resolution is "none". */
+const CUSTOM_LOCAL_AUTH_MARKER = "custom-local";
+
+function envApiKey() {
+  for (const name of MEDIA_ENV_API_KEYS) {
+    const value = process.env[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+/**
+ * Expand an apiKey written in provider config:
+ *   - `${ENV_VAR}`        -> process.env.ENV_VAR
+ *   - `secretref-env:VAR` -> process.env.VAR
+ *   - plain literal      -> as-is
+ *
+ * Values containing a mask glyph (`…`) are refused: OpenClaw reports a
+ * redacted key back through `cfg`, and sending that to the API would only
+ * trade a clear 401 for a confusing one.
+ */
+function expandSecret(value) {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const trimmed = value.trim();
+  if (trimmed.includes("\u2026")) return undefined;
+  const envMatch = trimmed.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/);
+  if (envMatch) return process.env[envMatch[1]] || undefined;
+  const refPrefix = "secretref-env:";
+  if (trimmed.startsWith(refPrefix)) {
+    return process.env[trimmed.slice(refPrefix.length)] || undefined;
+  }
+  return trimmed;
+}
+
+/**
+ * Resolve the bearer token for a media-understanding call.
+ *
+ * Core's image branch (`runner.entries.ts`, `capability === "image"`) calls
+ * `provider.describeImage(imageInput)` WITHOUT going through
+ * `resolveProviderExecutionAuth` — unlike the audio and video branches, which
+ * both pass `...requestAuth`. So `req.auth` and `req.apiKey` arrive empty and
+ * `req.cfg` carries only a masked key. Without a fallback the image path dies
+ * with HTTP 401 "login fail ... API secret key" while video works fine.
+ */
+function resolveMediaApiKey(req) {
+  if (req.auth?.kind === "api-key" && req.auth.apiKey) return req.auth.apiKey;
+  if (
+    typeof req.apiKey === "string" &&
+    req.apiKey &&
+    req.apiKey !== CUSTOM_LOCAL_AUTH_MARKER
+  ) {
+    return req.apiKey;
+  }
+  return (
+    expandSecret(req.cfg?.models?.providers?.[PROVIDER_ID]?.apiKey) ?? envApiKey()
+  );
+}
+
 async function callResponses(req, opts) {
   const fetchFn = req.fetchFn ?? fetch;
   const model = resolveParam(req.model, DEFAULT_MODEL);
   const prompt = resolveParam(req.prompt, DEFAULT_PROMPT);
-  const apiKey = req.auth?.kind === "api-key" ? req.auth.apiKey : req.apiKey;
+  const apiKey = resolveMediaApiKey(req);
 
   const { baseUrl, allowPrivateNetwork, headers, dispatcherPolicy } =
     resolveProviderHttpRequestConfig({
@@ -237,7 +302,7 @@ export default definePluginEntry({
       ...buildProviderReplayFamilyHooks({ family: "openai-compatible" }),
 
       // Thinking policy is per-model: M3 is an on/off thinker; M3.1 Flash
-      // Preview always reasons and must not be offered `off`.
+      // always reasons and must not be offered `off`.
       resolveThinkingProfile: ({ modelId }) =>
         isM31Model(modelId)
           ? {

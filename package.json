@@ -1,9 +1,9 @@
 {
   "name": "@mirr0ch1/minimax-m3-provider",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "main": "index.js",
-  "description": "OpenClaw provider plugin for MiniMax M3 and M3.1 Flash Preview over the OpenAI Responses API: chat/text with reasoning-preserving replay (reasoning-effort mapping included), plus image and video understanding.",
+  "description": "OpenClaw provider plugin for MiniMax M3 and M3.1 Flash over the OpenAI Responses API: chat/text with reasoning-preserving replay (reasoning-effort mapping included), plus image and video understanding.",
   "license": "MIT",
   "keywords": [
     "openclaw",
@@ -12,7 +12,7 @@
     "minimax-m3",
     "MiniMax-M3",
     "minimax-m3.1",
-    "MiniMax-M3.1-Flash-Preview",
+    "MiniMax-M3.1-Flash",
     "openai-responses",
     "reasoning-effort",
     "video-understanding"
@@ -25,7 +25,7 @@
       "pluginApi": ">=2026.4.2"
     },
     "build": {
-      "openclawVersion": "2026.9.3"
+      "openclawVersion": "2026.10.4"
     }
   }
 }
