@@ -2,10 +2,19 @@
   "id": "minimax-m3-provider",
   "name": "MiniMax M3 Provider",
   "description": "Unified MiniMax M3 / M3.1 Flash provider via OpenAI Responses API. Chat/text with reasoning-preserving replay (OpenClaw thinking high maps to M3.1 effort max); image and video understanding via Responses API input_image / input_video content parts.",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "providers": [
     "minimax-tp"
   ],
+  "modelIdNormalization": {
+    "providers": {
+      "minimax-tp": {
+        "aliases": {
+          "minimax-m3.1-flash-preview": "MiniMax-M3.1-Flash"
+        }
+      }
+    }
+  },
   "contracts": {
     "mediaUnderstandingProviders": [
       "minimax-tp"

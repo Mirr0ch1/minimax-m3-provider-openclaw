@@ -194,6 +194,9 @@ openclaw models list  | grep -i minimax
 | `MiniMax-M3` | text + image + video | 1,000,000 | 131,072 | ✅ 开关式 |
 | `MiniMax-M3.1-Flash` | text + image + video | 1,000,000 | 131,072 | ✅ 强度可调(low→max) |
 
+> 🔁 **旧 id 兼容**:`MiniMax-M3.1-Flash-Preview`(以及任意大小写写法)由 manifest 的
+> `modelIdNormalization` 别名自动归一为 `MiniMax-M3.1-Flash`,老配置无需改动即可继续用。
+
 > 输出的上游硬上限是 524,288,这里取官方推荐值 131,072。视频/图片理解链路的
 > `max_output_tokens` 固定为 2000(描述类任务足够,且避免思考把预算吃光)。
 >
@@ -295,6 +298,7 @@ stepfun / minimax 兜底档),默认模型都是 `MiniMax-M3`。
 | 插件启用了但模型没出现 | 检查 `plugins.allow` 里是否有 `minimax-m3-provider`(是**插件 id**,不是 `minimax-tp`)。 |
 | 媒体理解不走 M3 | 检查是否有更高 `autoPriority` 的视觉 Provider 抢占;M3 的优先级是 10。 |
 | 重启网关后头几个请求失败 | 网关 warm-up 竞态,等约 20s 再试,不是插件问题。 |
+| 配置里还写 `MiniMax-M3.1-Flash-Preview` 能用吗? | 能。manifest 的 `modelIdNormalization` 别名会在**解析阶段**归一为正式名,不用改配置。注意 `openclaw capability model inspect --model ...-Preview` 是精确字符串匹配,**会报 Model not found 属正常**,实际推理路径不受影响。 |
 | **图片**理解报 401 `login fail ... API secret key`,但**视频**正常 | 见 v1.2.0 更新日志:核心图片分支不注入 auth。本插件已自兜底;若仍报错,说明 `MINIMAX_TOKEN_PLAN_API_KEY` 未进网关环境(见下方环境变量表)。 |
 
 ---
@@ -325,6 +329,13 @@ stepfun / minimax 兜底档),默认模型都是 `MiniMax-M3`。
 
 ## 更新日志 / Changelog
 
+**v1.2.1**(2026-10-19)
+- **旧模型 id 继续可用**:manifest 增加 `modelIdNormalization.providers["minimax-tp"].aliases`,
+  把 `minimax-m3.1-flash-preview` 映射到 `MiniMax-M3.1-Flash`。已装旧配置(模型注册名、`model.primary`、
+  `imageModel`、`tools.media.*.preferredModel`、cron `payload.model` 里写的是 `-Preview`)会**在解析阶段
+  自动归一**到正式名,无需改配置。这是核心的官方机制(Google / Anthropic 的 `*-preview` → GA 也用它),
+  且大小写不敏感。
+
 **v1.2.0**(2026-10-19)
 - **修复图片理解链路 401**(`login fail ... API secret key`):OpenClaw 核心的
   `capability === "image"` 分支直接调用 `provider.describeImage(input)`,**没有**像
@@ -332,8 +343,7 @@ stepfun / minimax 兜底档),默认模型都是 `MiniMax-M3`。
   于是 `req.auth` / `req.apiKey` 都是空的,`req.cfg` 里只有被脱敏的 key。插件现在自己兜底
   解析(provider config 的 `\${ENV}` / `secretref-env:` → `MINIMAX_TOKEN_PLAN_API_KEY`
   → `MINIMAX_API_KEY`),并拒绝把带 `…` 的脱敏值发出去。**视频链路一直是好的**,因为它有 auth。
-- 跟进 M3.1 Flash 正式版:**模型 id 收敛为 `MiniMax-M3.1-Flash`**(旧的
-  `MiniMax-M3.1-Flash-Preview` 仍被上游解析,但新配置请用正式名)
+- 跟进 M3.1 Flash 正式版:**模型 id 收敛为 `MiniMax-M3.1-Flash`**(旧 id 的兼容见 v1.2.1)
 - 文档纠正:该模型**不是纯文本模型**。2026-10-03 实测 + 正式版复测确认 text / image /
   video 输入全部可用,README 模型表的输入列与示例配置的 `input` 同步改为三者齐备
 - 插件源码中"Flash Preview"字样清理(仅保留 `MiniMax-M3.1-*` 族匹配正则,新旧 id 通吃)

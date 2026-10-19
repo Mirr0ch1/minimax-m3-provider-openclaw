@@ -1,6 +1,6 @@
 {
   "name": "@mirr0ch1/minimax-m3-provider",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "type": "module",
   "main": "index.js",
   "description": "OpenClaw provider plugin for MiniMax M3 and M3.1 Flash over the OpenAI Responses API: chat/text with reasoning-preserving replay (reasoning-effort mapping included), plus image and video understanding.",
