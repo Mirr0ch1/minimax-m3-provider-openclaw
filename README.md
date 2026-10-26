@@ -209,41 +209,50 @@ openclaw models list  | grep -i minimax
 
 ## 思考等级 / Thinking Levels
 
-### M3.1 Flash:真实档位,`high` → `max`
+### M3.1 Flash:真实档位,`low` → `max` 直通
 
 M3.1 的 `reasoning` **始终开启**,`effort` 是真实强度旋钮
 (`low` / `medium` / `high` / `xhigh` / `max`,省略时服务端默认 `max`),
-且 `effort: "none"` 会直接返回 **HTTP 400**。因此该模型**不提供 `off` 档**。
+且 `effort: "none"` / `ultra` 会直接返回 **HTTP 400**。因此该模型**不提供 `off` 档**。
 
-`/think` 接受 `low` / `medium` / `high`,默认 `high`,由插件在 `wrapStreamFn`
-里把档位钉成 MiniMax 的 `reasoning.effort`:
+OpenClaw 2026.10 起原生支持 `xhigh` / `max`(并由核心自动追加 `ultra`),
+插件把 profile 声明为 `low` / `medium` / `high` / `xhigh` / `max`,默认 `max`,
+各档 1:1 落到 MiniMax 的 `reasoning.effort`:
 
 | 等级 / Level | `reasoning.effort` | 说明 |
 |---|---|---|
-| `high` | `max` | **OpenClaw 的最高档映射到模型最高档** |
-| `medium` | `medium` | 直通 |
 | `low` | `low` | 直通 |
+| `medium` | `medium` | 直通 |
+| `high` | `high` | 直通(模型自己的中高档,**不再**压成 `max`) |
+| `xhigh` | `xhigh` | 直通 |
+| `max` | `max` | 直通,profile 默认档 |
+| `ultra` | `max` | OpenClaw 的 harness 模式,核心会在进入 Provider 前降为 `max` |
 | `off`(仅遗留会话状态) | `low` | 模型无法真正关闭思考,退化到最省档;不下发 `none` |
-| `xhigh` / `max` / `ultra` | `max` | 兼容其它 Provider 切换过来的档位 |
+| `minimal` / `adaptive`(profile 不提供) | `low` / `medium` | 兜底映射,避免别的 Provider 的会话状态把非法值发到线上 |
 
-> 为什么必须在插件里钉?OpenClaw 核心默认把 `high` 原样写成 `"high"`(对 M3.1 只是中等),
-> 而 `off` 时干脆**不写 `reasoning` 字段** —— 那会被 M3.1 当成默认的 `max`。两头都错,
-> 所以插件在请求体上做显式映射。
+> 为什么还要在插件里钉?OpenClaw 核心在 `off` 时会**不写 `reasoning` 字段** ——
+> 那会被 M3.1 当成默认的 `max`;遗留的 `off` 会话则可能下发 `none`(HTTP 400)。
+> 插件在请求体上显式映射,保证这两条边界路径不会打到线上。
+>
+> ⚠️ 旧版(≤1.2.1)只声明 `low` / `medium` / `high`,并把 `high` 钉成 `max`。
+> 当 `agents.defaults.thinkingDefault` 为 `max` 时会提示"不支持 max,已回退到 high"。
+> **1.3.0** 起 profile 覆盖到 `max`,`/think max` / `--thinking max` 不再回退。
 
 ### M3:开关式
 
-`/think` 接受 `off` / `low` / `medium` / `high`,默认 `high`:
+`/think` 接受 `off` / `low` / `medium` / `high` / `xhigh` / `max`,默认 `high`:
 
 | 等级 / Level | `reasoning.effort` | 效果 |
 |---|---|---|
-| `off` | *(不下发字段)* | OpenClaw 在 `off` 时根本不写 `reasoning`,等价于不思考 |
-| `low` / `medium` / `high` | `low` / `medium` / `high` | **M3 不区分强度,三者均只是"开启思考"** |
+| `off` | `none` | 关闭思考 |
+| `low` / `medium` / `high` / `xhigh` / `max` | 同名 effort | **M3 不区分强度,均只是"开启思考"** |
 
-> ⚠️ **M3 的 effort 是开关而不是旋钮。** 只要是非 `none` 的值,思考强度完全一致;
-> `low` / `medium` / `high` 的存在只是为了从其它 Provider 切换过来时 `/think high` 不报错。
+> ⚠️ **M3 的 effort 是开关而不是旋钮。** 实测 `max` / `xhigh` / `none` 都返回 200,
+> 但非 `none` 的取值思考强度完全一致;这些档位的存在是为了跟 OpenClaw 的
+> `low`…`max` 对齐,避免全局 `thinkingDefault: max` 在 M3 上触发降级提示。
 >
 > MiniMax M3 does not grade reasoning intensity: any non-`none` effort simply enables
-> thinking. The three levels exist for provider-switch compatibility only.
+> thinking. All enabled levels exist for OpenClaw level compatibility only.
 
 ---
 
@@ -280,7 +289,7 @@ stepfun / minimax 兜底档),默认模型都是 `MiniMax-M3`。
    (2026-10-19 用红/蓝双帧 MP4 复测,帧色按序答对)。
 4. **历史可携带 `reasoning` item**,多轮思考链连续;这是本插件选 Responses 的核心理由。
 5. **`reasoning.effort` 语义按模型不同**:M3 是开关(`none` 关闭,其余值只是"开启");
-   M3.1 Flash 是强度旋钮(`low`→`max`,始终开启,`none` 报 400)。
+   M3.1 Flash 是强度旋钮(`low`→`max`,始终开启,`none` 与 `ultra` 均报 400)。
    **正式版(2026-10-19)对这些契约逐条复测,与 Preview 行为一致。**
 6. **`service_tier: "priority"`** 被网关接受,走优先队列(计费 1.5 倍)。
 
@@ -292,7 +301,7 @@ stepfun / minimax 兜底档),默认模型都是 `MiniMax-M3`。
 |---|---|
 | 模型列表里没有 `MiniMax-M3` / `MiniMax-M3.1-Flash` | 没解析到密钥,或没写 `models.providers.minimax-tp`。插件目录只负责动态发现,选择器读配置。 |
 | `not allowed for agent ... by agents.defaults.modelPolicy.allow` | 把对应模型(`minimax-tp/...`)加进 `modelPolicy.allow`。 |
-| `/think high` 时 M3.1 没有真的用 `max` | 检查模型 id 是否命中 `MiniMax-M3.1-*`(插件靠它判断是否钉 effort);providers 里 `api` 必须仍是 `openai-responses`。 |
+| `/think max` 在 M3.1 上提示"不支持,已回退到 high" | 插件版本需 ≥ **1.3.0**(该版本才把 `xhigh` / `max` 声明进 thinking profile);用 `openclaw plugins list` 确认加载的是新版本后重启网关。 |
 | `/think off` 在 M3.1 上仍会思考 | 预期行为:M3.1 无法关闭思考,插件把它退化为 `effort: "low"`(最省),而不是下发会被 400 拒绝的 `none`。 |
 | 改了 `baseUrl` 不生效 | `models.providers["minimax-tp"].baseUrl` 与插件默认值(写死在 `index.js`)是两处。 |
 | 插件启用了但模型没出现 | 检查 `plugins.allow` 里是否有 `minimax-m3-provider`(是**插件 id**,不是 `minimax-tp`)。 |
@@ -328,6 +337,19 @@ stepfun / minimax 兜底档),默认模型都是 `MiniMax-M3`。
 ---
 
 ## 更新日志 / Changelog
+
+**v1.3.0**(2026-10-26)
+- **跟进 OpenClaw 原生 `max` / `xhigh` 档位**:M3.1 Flash 的 thinking profile 从
+  `low`/`medium`/`high` 扩到 `low`/`medium`/`high`/`xhigh`/`max`,默认 `max`。
+  修复 `agents.defaults.thinkingDefault: "max"`(或 `--thinking max`)时被核心判为
+  "不支持 max,已回退到 high" 的问题。`ultra` 仍由核心自动追加,进入 Provider 前降为 `max`。
+- **映射改为 1:1**:`high` → `high`(不再钉成 `max`),`xhigh` → `xhigh`,
+  `max` → `max`,`off`(遗留)→ `low`。M3.1 官方允许值实测为
+  `low/medium/high/xhigh/max`,`ultra` 与 `none` 均返回 HTTP 400。
+- **M3 同步暴露 `xhigh` / `max`**:M3 的 effort 仍只是开关,但这些值实测均返回 200,
+  这样全局 `thinkingDefault: max` 在 M3 上也不会触发降级提示。
+- 默认档位:M3.1 改为 `max`(与 MiniMax 省略 effort 时的默认值、以及旧版 `high→max`
+  的实际效果一致);M3 保持 `high`。
 
 **v1.2.1**(2026-10-19)
 - **旧模型 id 继续可用**:manifest 增加 `modelIdNormalization.providers["minimax-tp"].aliases`,

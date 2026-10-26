@@ -39,9 +39,15 @@ const MAX_OUTPUT_TOKENS = 2000;
 /**
  * Model-aware thinking policy.
  *
+ * OpenClaw's canonical levels are off/minimal/low/medium/high/xhigh/adaptive/
+ * max/ultra (ultra is a harness mode appended by core for the embedded
+ * runtime, so providers must not declare it).
+ *
  * `MiniMax-M3` — `reasoning.effort` is an on/off switch: `none` disables
  * thinking, every other value just turns it on with identical depth. An `off`
- * level is therefore meaningful and is offered.
+ * level is therefore meaningful and is offered. `xhigh`/`max` are accepted by
+ * the API even though they do not deepen thinking; advertising them keeps
+ * OpenClaw's `max` default from being downgraded with a warning.
  *
  * `MiniMax-M3.1-Flash` (id `MiniMax-M3.1-Flash-Preview` still resolves) —
  * reasoning is always on and `effort` is a real
@@ -49,8 +55,8 @@ const MAX_OUTPUT_TOKENS = 2000;
  * It answers `effort: "none"` with HTTP 400, so `off` must NOT be offered and
  * must never reach the wire.
  */
-const M3_THINKING_LEVELS = ["off", "low", "medium", "high"];
-const M31_THINKING_LEVELS = ["low", "medium", "high"];
+const M3_THINKING_LEVELS = ["off", "low", "medium", "high", "xhigh", "max"];
+const M31_THINKING_LEVELS = ["low", "medium", "high", "xhigh", "max"];
 
 /** Matches `MiniMax-M3.1-*` ids, tolerating a `provider/model` reference. */
 const M31_MODEL_RE = /^minimax-m3\.1(?:$|[-.\s])/i;
@@ -64,11 +70,16 @@ function isM31Model(modelId) {
 /**
  * OpenClaw thinking level -> MiniMax-M3.1 `reasoning.effort`.
  *
- * OpenClaw's `high` is the top tier a user picks, so it maps onto the model's
- * own `max`. `off` cannot be honoured (the endpoint rejects `none`), so it
- * degrades to the cheapest enabled effort rather than being dropped — omitting
- * the field is not neutral either, because M3.1 then defaults to `max`
- * internally. `xhigh`/`max`/`ultra` also land on `max`.
+ * Since OpenClaw 2026.10 models expose `xhigh` and `max` natively, the graded
+ * levels pass through 1:1. `high` no longer means `max`: MiniMax itself treats
+ * `high` as a mid tier, so collapsing it to `max` made `high` and `max`
+ * indistinguishable and hid the model's own `xhigh` tier.
+ *
+ * `off` cannot be honoured (the endpoint rejects `none`), so it degrades to
+ * the cheapest enabled effort rather than being dropped — omitting the field
+ * is not neutral either, because M3.1 then defaults to `max` internally.
+ * `ultra` is an OpenClaw harness mode; core normally lowers it to `max` before
+ * the provider boundary, so this entry is only a safety net for direct callers.
  */
 const M31_EFFORT_BY_LEVEL = {
   off: "low",
@@ -76,8 +87,8 @@ const M31_EFFORT_BY_LEVEL = {
   low: "low",
   medium: "medium",
   adaptive: "medium",
-  high: "max",
-  xhigh: "max",
+  high: "high",
+  xhigh: "xhigh",
   max: "max",
   ultra: "max",
 };
@@ -302,12 +313,15 @@ export default definePluginEntry({
       ...buildProviderReplayFamilyHooks({ family: "openai-compatible" }),
 
       // Thinking policy is per-model: M3 is an on/off thinker; M3.1 Flash
-      // always reasons and must not be offered `off`.
+      // always reasons and must not be offered `off`. Core appends `ultra`
+      // itself for the embedded runtime, so it is intentionally absent here.
+      // M3.1 defaults to `max`, matching both MiniMax's own omitted-effort
+      // default and the pre-1.3 behaviour (where `high` was pinned to `max`).
       resolveThinkingProfile: ({ modelId }) =>
         isM31Model(modelId)
           ? {
               levels: M31_THINKING_LEVELS.map((id) => ({ id })),
-              defaultLevel: "high",
+              defaultLevel: "max",
             }
           : {
               levels: M3_THINKING_LEVELS.map((id) => ({ id })),
@@ -315,15 +329,16 @@ export default definePluginEntry({
             },
 
       // Inject MiniMax-specific body fields:
-      //   reasoning.effort          -> M3.1 only; maps OpenClaw `high` -> `max`
+      //   reasoning.effort          -> M3.1 only; graded levels pass through
       //   service_tier: "priority"  -> 1.5x price, priority queue admission
       //   prompt_cache_key          -> prompt caching
       //
       // The service_tier / prompt_cache_key injections stay optional (only
-      // filled when absent). The M3.1 effort pin is not optional: core's own
-      // resolver maps `high` to `"high"`, which M3.1 treats as a *mid* level,
-      // and core drops the field entirely for `off` — which M3.1 silently
-      // reads as its `max` default.
+      // filled when absent). The M3.1 effort pin is not optional: core drops
+      // the field entirely for `off`, which M3.1 silently reads as its `max`
+      // default, and core would send `none` for a legacy session still on
+      // `off` — an HTTP 400. Every other level is normalised here so the wire
+      // contract never depends on core's per-transport effort handling.
       wrapStreamFn: (ctx) => {
         const baseStreamFn = ctx.streamFn;
         if (!baseStreamFn) return undefined;
