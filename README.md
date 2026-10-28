@@ -1,18 +1,28 @@
-<div align="center">
+<p align="center">
+  <img src="assets/readme/banner-zh-Hans.png" alt="minimax-m3-provider — OpenClaw 插件：以 OpenAI Responses 协议接入 MiniMax M3 / M3.1 Flash —— 聊天/文本 + 图片理解 + 视频理解" width="100%">
+</p>
 
-# minimax-m3-provider
+<p align="center">
+  <a href="https://clawhub.ai/mirr0ch1/plugins/minimax-m3-provider"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fclawhub.ai%2Fapi%2Fv1%2Fpackages%2Fsearch%3Fq%3D%40mirr0ch1%2Fminimax-m3-provider%26limit%3D1&query=%24.results%5B0%5D.package.latestVersion&label=ClawHub&style=for-the-badge&color=FF5C5C" alt="ClawHub"></a>
+  <a href="https://clawhub.ai/mirr0ch1/plugins/minimax-m3-provider"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fclawhub.ai%2Fapi%2Fv1%2Fpackages%2Fsearch%3Fq%3D%40mirr0ch1%2Fminimax-m3-provider%26limit%3D1&query=%24.results%5B0%5D.package.stats.downloads&label=ClawHub%20downloads&style=for-the-badge&color=FF5C5C" alt="ClawHub downloads"></a>
+  <img src="https://img.shields.io/github/stars/Mirr0ch1/minimax-m3-provider-openclaw?style=for-the-badge&logo=github&label=stars" alt="Stars">
+  <img src="https://img.shields.io/badge/license-MIT-2ea44f?style=for-the-badge&logo=opensourceinitiative&logoColor=white" alt="MIT license">
+</p>
 
-**OpenClaw 插件:以 OpenAI Responses 协议接入 MiniMax M3 / M3.1 Flash —— 聊天/文本 + 图片理解 + 视频理解**
+<p align="center">
+  <img src="https://img.shields.io/badge/OpenClaw-2026.9.3%2B-2ea44f?style=for-the-badge" alt="OpenClaw"> <img src="https://img.shields.io/badge/transport-openai--responses-f97316?style=for-the-badge" alt="transport"> <img src="https://img.shields.io/badge/provider-MiniMax-FF5C5C?style=for-the-badge" alt="provider"> <img src="https://img.shields.io/badge/modalities-text%20%7C%20image%20%7C%20video-8A2BE2?style=for-the-badge" alt="modalities">
+</p>
 
-*OpenClaw plugin: MiniMax M3 & M3.1 Flash over the OpenAI Responses API — chat/text with reasoning-preserving replay, plus image and video understanding*
+<p align="center">
+  <a href="https://clawhub.ai/mirr0ch1/plugins/minimax-m3-provider"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fclawhub.ai%2Fapi%2Fv1%2Fpackages%2Fsearch%3Fq%3D%40mirr0ch1%2Fminimax-m3-provider%26limit%3D1&query=%24.results%5B0%5D.package.stats.installs&label=ClawHub%20installs&style=flat-square&color=FF5C5C" alt="ClawHub installs"></a> <img src="https://img.shields.io/badge/models-2-6e7781?style=flat-square" alt="models"> <img src="https://img.shields.io/badge/priority%20queue-yes-2ea44f?style=flat-square" alt="priority%20queue">
+</p>
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![OpenClaw](https://img.shields.io/badge/OpenClaw-2026.9.3-blue.svg)](https://github.com/openclaw/openclaw)
-[![Provider](https://img.shields.io/badge/provider-minimax--tp-ff5c5c.svg)](https://platform.minimax.cn)
-[![Transport](https://img.shields.io/badge/transport-openai--responses-orange.svg)](https://platform.minimax.cn)
-[![Modalities](https://img.shields.io/badge/modalities-text%20%7C%20image%20%7C%20video-purple.svg)](#媒体理解--media-understanding)
+<h1 align="center">minimax-m3-provider</h1>
 
-</div>
+<p align="center">
+  <b>OpenClaw 插件：以 OpenAI Responses 协议接入 MiniMax M3 / M3.1 Flash —— 聊天/文本 + 图片理解 + 视频理解</b><br>
+  <sub>OpenClaw plugin: MiniMax M3 &amp; M3.1 Flash over the OpenAI Responses API — chat/text with reasoning-preserving replay, plus image and video understanding</sub>
+</p>
 
 ---
 
